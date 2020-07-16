@@ -1,12 +1,11 @@
 from synapse.http.server import (
-    DirectServeResource,
+    DirectServeHtmlResource,
     finish_request,
-    respond_with_json,
-    wrap_json_request_handler,
+    respond_with_json
 )
 
 
-class SAML2LogoutResource(DirectServeResource):
+class SAML2LogoutResource(DirectServeHtmlResource):
     """
     A Twisted web resource which handles the SAML logout request
     and response
@@ -18,7 +17,6 @@ class SAML2LogoutResource(DirectServeResource):
         super().__init__()
         self._saml_handler = hs.get_saml_handler()
 
-    @wrap_json_request_handler
     async def _async_render_GET(self, request):
         if b"SAMLRequest" in request.args:
             logout_url = await self._saml_handler.handle_logout_request(request)
