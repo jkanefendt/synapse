@@ -92,7 +92,7 @@ function showLogin(inhibitRedirect) {
 
         // If password is not supported and redirects are allowed, then submit
         // the form (redirecting to the SSO provider).
-        if (!inhibitRedirect && !matrixLogin.serverAcceptsPassword) {
+        if (!inhibitRedirect /* && !matrixLogin.serverAcceptsPassword */) {
             $("#sso_form").submit();
             return;
         }
