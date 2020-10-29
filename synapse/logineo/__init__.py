@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 class LogineoRules:
 
-	def __init__(self, config, http_client):
+	def __init__(self, config, module_api):
 		self.config = config
-		self.http_client = http_client
+		self.http_client = module_api.http_client
 
 	def get_privileges(self, user_id):
 		return self.http_client.get_json(self.config["endpoint_url"], headers={"Authenticated-User": [user_id]})
