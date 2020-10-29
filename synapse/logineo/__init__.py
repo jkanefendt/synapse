@@ -4,6 +4,10 @@ import logging
 from twisted.internet import defer
 import requests
 import json
+import base64
+import hashlib
+import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +20,20 @@ class LogineoRules:
 	def get_privileges(self, user_id):
 		return self.http_client.get_json(self.config["endpoint_url"], headers={"Authenticated-User": [user_id]})
 
+	def get_salted_hash(self, str):
+		md5 = hashlib.md5()
+		md5.update(str.encode('utf-8'))
+		md5.update(self.config["jitsi_conference_id_salt"].encode('utf-8'))
+		hash_in_bytes = md5.digest()
+		return base64.b32encode(hash_in_bytes).decode()[:16]
+
+	def get_conference_id_token(self, conference_id):
+		epoch = int(time.time())
+		epoch_bytes = epoch.to_bytes(4, byteorder='big')
+		epoch_base32 = base64.b32encode(epoch_bytes).decode()[:7]
+		conference_id = conference_id + epoch_base32
+		return conference_id + self.get_salted_hash(conference_id.lower())
+
 	async def check_event_allowed(self, event, state_events):
 		allowed = True
 		content = event["content"]
@@ -24,9 +42,28 @@ class LogineoRules:
 				privileges = await self.get_privileges(event.sender)
 				allowed = "create-rooms" in privileges
 		elif event.type == "im.vector.modular.widgets":
-			if content["type"] == "jitsi":
-				privileges = await self.get_privileges(event.sender)
-				allowed = "start-conference" in privileges
+			if "type" in content and content["type"] == "jitsi":
+#				privileges = await self.get_privileges(event.sender)
+#				allowed = "start-conference" in privileges
+				conference_id = self.get_conference_id_token(content["data"]["conferenceId"])
+				new_content = {
+					'type': content["type"],
+					'url': re.sub(r'confId=[^#,]+', "confId=" + conference_id, content["url"]),
+					'name': content["name"] if "name" in content else None,
+					'data': {
+						'conferenceId': conference_id,
+						'isAudioOnly': content["data"]["isAudioOnly"],
+						'domain': content["data"]["domain"],
+						'auth': content["data"]["auth"] if "auth" in content["data"] else None,
+					},
+				}
+				return {
+					'type': event["type"],
+					'room_id': event["room_id"],
+					'sender': event["sender"],
+					'content': new_content,
+                    'state_key': event["state_key"]
+				}
 
 		return allowed
 
@@ -50,7 +87,8 @@ class LogineoRules:
 
 	def parse_config(config):
 		endpoint_url = config.get("endpoint_url")
-		return { "endpoint_url": endpoint_url }
+		jitsi_conference_id_salt = config.get("jitsi_conference_id_salt")
+		return { "endpoint_url": endpoint_url, "jitsi_conference_id_salt": jitsi_conference_id_salt }
 
 
 class RestAuthProvider(object):
