@@ -46,8 +46,9 @@ class LogineoRules:
 				if allowed:
 					conference_id = self.generate_conference_id_token(event["room_id"])
 					url = content["url"];
-					url = re.sub(r'^https://[^/?]+', "https://" + self.config["jitsi_domain"], url)
-					url = re.sub(r'confId=[^#,]+', "confId=" + conference_id, url)
+					url = re.sub(r'conferenceId=[^&]+', "conferenceId=" + conference_id, url)
+					url = re.sub(r'confId=[^#&]+', "confId=" + conference_id, url)
+					url = re.sub(r'conferenceDomain=[^#&]+', "conferenceDomain=" + self.config["jitsi_domain"], url)
 					new_content = {
 						'type': content["type"],
 						'url': url,
