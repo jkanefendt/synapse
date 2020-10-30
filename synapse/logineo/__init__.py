@@ -3,13 +3,14 @@
 import logging
 from twisted.internet import defer
 import requests
-import json
 import base64
-import hashlib
+import hmac
+from hashlib import sha256
 import re
 import time
 
 logger = logging.getLogger(__name__)
+room_id_pattern = re.compile('!([^:]+)')
 
 class LogineoRules:
 
@@ -20,19 +21,16 @@ class LogineoRules:
 	def get_privileges(self, user_id):
 		return self.http_client.get_json(self.config["endpoint_url"], headers={"Authenticated-User": [user_id]})
 
-	def get_salted_hash(self, str):
-		md5 = hashlib.md5()
-		md5.update(str.encode('utf-8'))
-		md5.update(self.config["jitsi_conference_id_salt"].encode('utf-8'))
-		hash_in_bytes = md5.digest()
-		return base64.b32encode(hash_in_bytes).decode()[:16]
-
-	def get_conference_id_token(self, conference_id):
+	def generate_conference_id_token(self, room_id):
+		room_id_match = room_id_pattern.match(room_id)
+		if room_id_match:
+			room_id = room_id_match.group(1)
 		epoch = int(time.time())
 		epoch_bytes = epoch.to_bytes(4, byteorder='big')
-		epoch_base32 = base64.b32encode(epoch_bytes).decode()[:7]
-		conference_id = conference_id + epoch_base32
-		return conference_id + self.get_salted_hash(conference_id.lower())
+		epoch_base32 = base64.b32encode(epoch_bytes).decode()[:7].lower()
+		conference_id = room_id.lower() + epoch_base32
+		hmac_bytes = hmac.new(key=self.config["jitsi_hmac_secret"], msg=conference_id.encode('utf-8'), digestmod=sha256).digest()
+		return conference_id + base64.b32encode(hmac_bytes).decode()[:-4].lower()
 
 	async def check_event_allowed(self, event, state_events):
 		allowed = True
@@ -43,27 +41,31 @@ class LogineoRules:
 				allowed = "create-rooms" in privileges
 		elif event.type == "im.vector.modular.widgets":
 			if "type" in content and content["type"] == "jitsi":
-#				privileges = await self.get_privileges(event.sender)
-#				allowed = "start-conference" in privileges
-				conference_id = self.get_conference_id_token(content["data"]["conferenceId"])
-				new_content = {
-					'type': content["type"],
-					'url': re.sub(r'confId=[^#,]+', "confId=" + conference_id, content["url"]),
-					'name': content["name"] if "name" in content else None,
-					'data': {
-						'conferenceId': conference_id,
-						'isAudioOnly': content["data"]["isAudioOnly"],
-						'domain': content["data"]["domain"],
-						'auth': content["data"]["auth"] if "auth" in content["data"] else None,
-					},
-				}
-				return {
-					'type': event["type"],
-					'room_id': event["room_id"],
-					'sender': event["sender"],
-					'content': new_content,
-                    'state_key': event["state_key"]
-				}
+				privileges = await self.get_privileges(event.sender)
+				allowed = "start-conference" in privileges
+				if allowed:
+					conference_id = self.generate_conference_id_token(event["room_id"])
+					url = content["url"];
+					url = re.sub(r'^https://[^/?]+', "https://" + self.config["jitsi_domain"], url)
+					url = re.sub(r'confId=[^#,]+', "confId=" + conference_id, url)
+					new_content = {
+						'type': content["type"],
+						'url': url,
+						'name': content["name"] if "name" in content else None,
+						'data': {
+							'conferenceId': conference_id,
+							'isAudioOnly': content["data"]["isAudioOnly"],
+							'domain': self.config["jitsi_domain"],
+							'auth': content["data"]["auth"] if "auth" in content["data"] else None,
+						},
+					}
+					return {
+						'type': event["type"],
+						'room_id': event["room_id"],
+						'sender': event["sender"],
+						'content': new_content,
+                	    'state_key': event["state_key"]
+					}
 
 		return allowed
 
@@ -87,8 +89,9 @@ class LogineoRules:
 
 	def parse_config(config):
 		endpoint_url = config.get("endpoint_url")
-		jitsi_conference_id_salt = config.get("jitsi_conference_id_salt")
-		return { "endpoint_url": endpoint_url, "jitsi_conference_id_salt": jitsi_conference_id_salt }
+		jitsi_hmac_secret = base64.b64decode(config.get("jitsi_hmac_secret"))
+		jitsi_domain = config.get("jitsi_domain")
+		return { "endpoint_url": endpoint_url, "jitsi_hmac_secret": jitsi_hmac_secret, "jitsi_domain": jitsi_domain }
 
 
 class RestAuthProvider(object):
