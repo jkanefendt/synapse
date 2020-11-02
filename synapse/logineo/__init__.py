@@ -12,6 +12,12 @@ import time
 logger = logging.getLogger(__name__)
 room_id_pattern = re.compile('!([^:]+)')
 
+def clone_dict(dict):
+    clone = {}
+    for key, value in dict.items():
+        clone[key] = value
+    return clone
+
 class LogineoRules:
 
 	def __init__(self, config, module_api):
@@ -49,24 +55,15 @@ class LogineoRules:
 					url = re.sub(r'conferenceId=[^&]+', "conferenceId=" + conference_id, url)
 					url = re.sub(r'confId=[^#&]+', "confId=" + conference_id, url)
 					url = re.sub(r'conferenceDomain=[^#&]+', "conferenceDomain=" + self.config["jitsi_domain"], url)
-					new_content = {
-						'type': content["type"],
-						'url': url,
-						'name': content["name"] if "name" in content else None,
-						'data': {
-							'conferenceId': conference_id,
-							'isAudioOnly': content["data"]["isAudioOnly"],
-							'domain': self.config["jitsi_domain"],
-							'auth': content["data"]["auth"] if "auth" in content["data"] else None,
-						},
-					}
-					return {
-						'type': event["type"],
-						'room_id': event["room_id"],
-						'sender': event["sender"],
-						'content': new_content,
-                	    'state_key': event["state_key"]
-					}
+					new_content = clone_dict(content)
+					new_content["url"] = url
+					new_data = clone_dict(content["data"])
+					new_data["conferenceId"] = conference_id
+					new_data["domain"] = self.config["jitsi_domain"]
+					new_content["data"] = new_data
+					new_event = clone_dict(event)
+					new_event["content"] = new_content
+					return new_event
 
 		return allowed
 
