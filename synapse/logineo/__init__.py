@@ -38,6 +38,23 @@ class LogineoRules:
 		hmac_bytes = hmac.new(key=self.config["jitsi_hmac_secret"], msg=conference_id.encode('utf-8'), digestmod=sha256).digest()
 		return conference_id + base64.b32encode(hmac_bytes).decode()[:-4].lower()
 
+	def sanitize_jitsi_event(self, event):
+		conference_id = self.generate_conference_id_token(event["room_id"])
+		content = event["content"]
+		url = content["url"];
+		url = re.sub(r'conferenceId=[^&]+', "conferenceId=" + conference_id, url)
+		url = re.sub(r'confId=[^#&]+', "confId=" + conference_id, url)
+		url = re.sub(r'conferenceDomain=[^#&]+', "conferenceDomain=" + self.config["jitsi_domain"], url)
+		new_content = clone_dict(content)
+		new_content["url"] = url
+		new_data = clone_dict(content["data"])
+		new_data["conferenceId"] = conference_id
+		new_data["domain"] = self.config["jitsi_domain"]
+		new_content["data"] = new_data
+		new_event = clone_dict(event)
+		new_event["content"] = new_content
+		return new_event
+
 	async def check_event_allowed(self, event, state_events):
 		allowed = True
 		content = event["content"]
@@ -50,20 +67,7 @@ class LogineoRules:
 				privileges = await self.get_privileges(event.sender)
 				allowed = "start-conference" in privileges
 				if allowed:
-					conference_id = self.generate_conference_id_token(event["room_id"])
-					url = content["url"];
-					url = re.sub(r'conferenceId=[^&]+', "conferenceId=" + conference_id, url)
-					url = re.sub(r'confId=[^#&]+', "confId=" + conference_id, url)
-					url = re.sub(r'conferenceDomain=[^#&]+', "conferenceDomain=" + self.config["jitsi_domain"], url)
-					new_content = clone_dict(content)
-					new_content["url"] = url
-					new_data = clone_dict(content["data"])
-					new_data["conferenceId"] = conference_id
-					new_data["domain"] = self.config["jitsi_domain"]
-					new_content["data"] = new_data
-					new_event = clone_dict(event)
-					new_event["content"] = new_content
-					return new_event
+					return self.sanitize_jitsi_event(event)
 
 		return allowed
 
