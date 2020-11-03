@@ -72,8 +72,7 @@ class ThirdPartyEventRules:
         # Ensure that the event is frozen, to make sure that the module is not tempted
         # to try to modify it. Any attempt to modify it at this point will invalidate
         # the hashes and signatures.
-        # TODO johannes.kanefendt@krzn.de 2020-11-02 Freezing this event will cause a serialization error for type frozendict. Needs further investigation.
-        #event.freeze()
+        event.freeze()
 
         return await self.third_party_rules.check_event_allowed(event, state_events)
 
