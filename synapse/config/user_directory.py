@@ -26,6 +26,7 @@ class UserDirectoryConfig(Config):
     def read_config(self, config, **kwargs):
         self.user_directory_search_enabled = True
         self.user_directory_search_all_users = False
+        self.user_directory_search_delegation_url = None
         user_directory_config = config.get("user_directory", None)
         if user_directory_config:
             self.user_directory_search_enabled = user_directory_config.get(
@@ -33,6 +34,9 @@ class UserDirectoryConfig(Config):
             )
             self.user_directory_search_all_users = user_directory_config.get(
                 "search_all_users", False
+            )
+            self.user_directory_search_delegation_url = user_directory_config.get(
+                "delegation_url", False
             )
 
     def generate_config_section(self, config_dir_path, server_name, **kwargs):
