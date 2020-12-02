@@ -84,6 +84,10 @@ class LoginRestServlet(RestServlet):
             burst_count=self.hs.config.rc_login_failed_attempts.burst_count,
         )
 
+    def client_supports_sso(self, request: SynapseRequest):
+        user_agents = request.requestHeaders.getRawHeaders(b"User-Agent", default=[])
+        return not (user_agents and "iOS 12" in str(user_agents[0]))
+
     def on_GET(self, request: SynapseRequest):
         flows = []
         if self.jwt_enabled:
@@ -95,19 +99,16 @@ class LoginRestServlet(RestServlet):
             # to SSO.
             flows.append({"type": LoginRestServlet.CAS_TYPE})
 
-        if self.cas_enabled or self.saml2_enabled or self.oidc_enabled:
-            user_agents = request.requestHeaders.getRawHeaders(b"User-Agent", default=[])
-            # SSO bis auf weiteres unter iOS 12 deaktivieren https://github.com/vector-im/element-ios/pull/3689
-            if not (user_agents and "iOS 12" in str(user_agents[0])):
-                flows.append({"type": LoginRestServlet.SSO_TYPE})
-                # While its valid for us to advertise this login type generally,
-                # synapse currently only gives out these tokens as part of the
-                # SSO login flow.
-                # Generally we don't want to advertise login flows that clients
-                # don't know how to implement, since they (currently) will always
-                # fall back to the fallback API if they don't understand one of the
-                # login flow types returned.
-                flows.append({"type": LoginRestServlet.TOKEN_TYPE})
+        if (self.cas_enabled or self.saml2_enabled or self.oidc_enabled) and self.client_supports_sso(request):
+            flows.append({"type": LoginRestServlet.SSO_TYPE})
+            # While its valid for us to advertise this login type generally,
+            # synapse currently only gives out these tokens as part of the
+            # SSO login flow.
+            # Generally we don't want to advertise login flows that clients
+            # don't know how to implement, since they (currently) will always
+            # fall back to the fallback API if they don't understand one of the
+            # login flow types returned.
+            flows.append({"type": LoginRestServlet.TOKEN_TYPE})
 
         flows.extend(
             ({"type": t} for t in self.auth_handler.get_supported_login_types())
