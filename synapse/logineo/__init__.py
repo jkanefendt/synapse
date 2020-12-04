@@ -8,6 +8,7 @@ import hmac
 from hashlib import sha256
 import re
 import time
+from synapse.types import UserID
 
 logger = logging.getLogger(__name__)
 room_id_pattern = re.compile('!([^:]+)')
@@ -23,6 +24,7 @@ class LogineoRules:
 	def __init__(self, config, module_api):
 		self.config = config
 		self.http_client = module_api.http_client
+		self.profile_handler = module_api._hs.profile_handler
 
 	def get_privileges(self, user_id):
 		return self.http_client.get_json(self.config["endpoint_url"], headers={"Authenticated-User": [user_id]})
@@ -55,6 +57,14 @@ class LogineoRules:
 		new_event["content"] = new_content
 		return new_event
 
+	def sanitize_join_event(self, event, displayname):
+		content = event["content"]
+		new_content = clone_dict(content)
+		new_content["displayname"] = displayname
+		new_event = clone_dict(event)
+		new_event["content"] = new_content
+		return new_event
+
 	async def check_event_allowed(self, event, state_events):
 		allowed = True
 		content = event["content"]
@@ -62,6 +72,10 @@ class LogineoRules:
 			if content["membership"] == "invite" and not ("is_direct" in content and content["is_direct"]):
 				privileges = await self.get_privileges(event.sender)
 				allowed = "create-rooms" in privileges
+			elif content["membership"] == "join" and "displayname" in content:
+				displayname = await self.profile_handler.get_displayname(UserID.from_string(event.sender))
+				if displayname != content["displayname"]:
+					return self.sanitize_join_event(event, displayname)
 		elif event.type == "im.vector.modular.widgets":
 			if "type" in content and content["type"] == "jitsi":
 				privileges = await self.get_privileges(event.sender)
