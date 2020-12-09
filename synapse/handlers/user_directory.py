@@ -21,6 +21,7 @@ from synapse.handlers.state_deltas import StateDeltasHandler
 from synapse.metrics.background_process_metrics import run_as_background_process
 from synapse.storage.roommember import ProfileInfo
 from synapse.util.metrics import Measure
+from synapse.http.client import SimpleHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,11 @@ class UserDirectoryHandler(StateDeltasHandler):
         self.is_mine_id = hs.is_mine_id
         self.update_user_directory = hs.config.update_user_directory
         self.search_all_users = hs.config.user_directory_search_all_users
+        self.search_delegation_url = hs.config.user_directory_search_delegation_url
         self.spam_checker = hs.get_spam_checker()
         # The current position in the current_state_delta stream
         self.pos = None
+        self.http_client = SimpleHttpClient(hs)
 
         # Guard to ensure we only process deltas one at a time
         self._is_processing = False
@@ -78,6 +81,13 @@ class UserDirectoryHandler(StateDeltasHandler):
                     ]
                 }
         """
+
+        if self.search_delegation_url:
+             data = { "search_term": search_term }
+             if limit:
+                 data["limit"] = limit
+             return await self.http_client.post_json_get_json(self.search_delegation_url, data, headers={"Authenticated-User": [user_id]})
+
         results = await self.store.search_user_dir(user_id, search_term, limit)
 
         # Remove any spammy users from the results.

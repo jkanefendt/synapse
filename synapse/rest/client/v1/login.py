@@ -74,6 +74,10 @@ class LoginRestServlet(RestServlet):
             burst_count=self.hs.config.rc_login_account.burst_count,
         )
 
+    def client_supports_sso(self, request: SynapseRequest):
+        user_agents = request.requestHeaders.getRawHeaders(b"User-Agent", default=[])
+        return not (user_agents and "iOS 12" in str(user_agents[0]))
+
     def on_GET(self, request: SynapseRequest):
         flows = []
         if self.jwt_enabled:
@@ -85,7 +89,7 @@ class LoginRestServlet(RestServlet):
             # to SSO.
             flows.append({"type": LoginRestServlet.CAS_TYPE})
 
-        if self.cas_enabled or self.saml2_enabled or self.oidc_enabled:
+        if (self.cas_enabled or self.saml2_enabled or self.oidc_enabled) and self.client_supports_sso(request):
             flows.append({"type": LoginRestServlet.SSO_TYPE})
             # While its valid for us to advertise this login type generally,
             # synapse currently only gives out these tokens as part of the

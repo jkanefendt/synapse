@@ -98,8 +98,8 @@ CONDITIONAL_REQUIREMENTS = {
     ],
     "saml2": [
         # pysaml2 6.4.0 is incompatible with Python 3.5 (see https://github.com/IdentityPython/pysaml2/issues/749)
-        "pysaml2>=4.5.0,<6.4.0;python_version<'3.6'",
-        "pysaml2>=4.5.0;python_version>='3.6'",
+        "pysaml2>=4.9.0,<6.4.0;python_version<'3.6'",
+        "pysaml2>=4.9.0;python_version>='3.6'",
     ],
     "oidc": ["authlib>=0.14.0"],
     "systemd": ["systemd-python>=231"],
